@@ -7,7 +7,7 @@
 
 
 import ngMock from 'ng_mock';
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 
 
 describe('ML - Recognize Wizard - Create Job Controller', () => {
@@ -26,14 +26,17 @@ describe('ML - Recognize Wizard - Create Job Controller', () => {
       };
 
       const scope = $rootScope.$new();
-      $controller('MlCreateRecognizerJobs', {
-        $route: {
-          current: {
-            params: {}
-          }
-        },
-        $scope: scope
-      });
+
+      expect(() => {
+        $controller('MlCreateRecognizerJobs', {
+          $route: {
+            current: {
+              params: {}
+            }
+          },
+          $scope: scope
+        });
+      }).to.not.throwError();
 
       expect(scope.ui.formValid).to.eql(true);
       done();

@@ -4,40 +4,49 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-import { Server } from 'hapi';
-// @ts-ignore
+import { flatten } from 'lodash';
+import { CoreSetup } from 'src/core/server';
 import { initErrorsApi } from '../errors';
 import { initServicesApi } from '../services';
-// @ts-ignore
-import { initStatusApi } from '../status_check';
 import { initTracesApi } from '../traces';
-import { initTransactionsApi } from '../transactions';
 
-describe('route handlers fail properly', () => {
+describe('route handlers should fail with a Boom error', () => {
   let consoleErrorSpy: any;
 
-  async function testRouteFailures(init: (server: Server) => void) {
+  async function testRouteFailures(init: (core: CoreSetup) => void) {
     const mockServer = { route: jest.fn() };
-    init((mockServer as unknown) as Server);
+    const mockCore = ({
+      http: {
+        server: mockServer
+      }
+    } as unknown) as CoreSetup;
+    init(mockCore);
     expect(mockServer.route).toHaveBeenCalled();
 
-    const routes = mockServer.route.mock.calls;
+    const mockCluster = {
+      callWithRequest: () => Promise.reject(new Error('request failed'))
+    };
+    const mockConfig = { get: jest.fn() };
     const mockReq = {
       params: {},
       query: {},
-      pre: {
-        setup: {
-          config: { get: jest.fn() },
-          client: jest.fn(() => Promise.reject(new Error('request failed')))
+      server: {
+        config: () => mockConfig,
+        plugins: {
+          elasticsearch: {
+            getCluster: () => mockCluster
+          }
         }
-      }
+      },
+      getUiSettingsService: jest.fn(() => ({
+        get: jest.fn()
+      }))
     };
 
+    const routes = flatten(mockServer.route.mock.calls);
     routes.forEach(async (route, i) => {
-      test(`route ${i + 1} of ${
-        routes.length
-      } should fail with a Boom error`, async () => {
-        await expect(route[0].handler(mockReq)).rejects.toMatchObject({
+      test(`${route.method} ${route.path}"`, async () => {
+        await expect(route.handler(mockReq)).rejects.toMatchObject({
           message: 'request failed',
           isBoom: true
         });
@@ -64,15 +73,7 @@ describe('route handlers fail properly', () => {
     await testRouteFailures(initServicesApi);
   });
 
-  describe('status check routes', async () => {
-    await testRouteFailures(initStatusApi);
-  });
-
   describe('trace routes', async () => {
     await testRouteFailures(initTracesApi);
-  });
-
-  describe('transaction routes', async () => {
-    await testRouteFailures(initTransactionsApi);
   });
 });

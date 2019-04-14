@@ -7,7 +7,7 @@
 
 
 import ngMock from 'ng_mock';
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 
 const mockModalInstance = { close: function () {}, dismiss: function () {} };
 
@@ -19,11 +19,14 @@ describe('ML - Confirm Modal Controller', () => {
   it('Initialize Confirm Modal Controller', (done) => {
     ngMock.inject(function ($rootScope, $controller) {
       const scope = $rootScope.$new();
-      $controller('MlConfirmModal', {
-        $scope: scope,
-        $modalInstance: mockModalInstance,
-        params: {}
-      });
+
+      expect(() => {
+        $controller('MlConfirmModal', {
+          $scope: scope,
+          $modalInstance: mockModalInstance,
+          params: {}
+        });
+      }).to.not.throwError();
 
       expect(scope.okLabel).to.be('OK');
       done();

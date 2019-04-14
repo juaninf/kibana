@@ -4,7 +4,8 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-import * as Chrome from 'puppeteer';
+import open from 'opn';
+import * as Chrome from 'puppeteer-core';
 import { parse as parseUrl } from 'url';
 import {
   ConditionalHeaders,
@@ -19,6 +20,11 @@ import {
 
 export interface ChromiumDriverOptions {
   logger: Logger;
+  inspect: boolean;
+}
+
+interface WaitForSelectorOpts {
+  silent?: boolean;
 }
 
 const WAIT_FOR_DELAY_MS: number = 100;
@@ -26,10 +32,12 @@ const WAIT_FOR_DELAY_MS: number = 100;
 export class HeadlessChromiumDriver {
   private readonly page: Chrome.Page;
   private readonly logger: Logger;
+  private readonly inspect: boolean;
 
-  constructor(page: Chrome.Page, { logger }: ChromiumDriverOptions) {
+  constructor(page: Chrome.Page, { logger, inspect }: ChromiumDriverOptions) {
     this.page = page;
-    this.logger = logger;
+    this.logger = logger.clone(['headless-chromium-driver']);
+    this.inspect = inspect;
   }
 
   public async open(
@@ -39,7 +47,7 @@ export class HeadlessChromiumDriver {
       waitForSelector,
     }: { conditionalHeaders: ConditionalHeaders; waitForSelector: string }
   ) {
-    this.logger.debug(`HeadlessChromiumDriver:opening url ${url}`);
+    this.logger.debug(`opening url ${url}`);
     await this.page.setRequestInterception(true);
     this.page.on('request', (interceptedRequest: any) => {
       if (this._shouldUseCustomHeaders(conditionalHeaders.conditions, interceptedRequest.url())) {
@@ -57,7 +65,12 @@ export class HeadlessChromiumDriver {
     });
 
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-    await this.page.waitFor(waitForSelector);
+
+    if (this.inspect) {
+      await this.launchDebugger();
+    }
+
+    await this.waitForSelector(waitForSelector);
   }
 
   public async screenshot(elementPosition: ElementPosition) {
@@ -84,8 +97,29 @@ export class HeadlessChromiumDriver {
     return result;
   }
 
-  public waitForSelector(selector: string) {
-    return this.page.waitFor(selector);
+  public async waitForSelector(selector: string, opts: WaitForSelectorOpts = {}) {
+    const { silent = false } = opts;
+    this.logger.debug(`waitForSelector ${selector}`);
+
+    let resp;
+    try {
+      resp = await this.page.waitFor(selector);
+    } catch (err) {
+      if (!silent) {
+        // Provide some troubleshooting info to see if we're on the login page,
+        // "Kibana could not load correctly", etc
+        this.logger.error(`waitForSelector ${selector} failed on ${this.page.url()}`);
+        const pageText = await this.evaluate({
+          fn: () => document.querySelector('body')!.innerText,
+          args: [],
+        });
+        this.logger.debug(`Page plain text: ${pageText.replace(/\n/g, '\\n')}`); // replace newline with escaped for single log line
+      }
+      throw err;
+    }
+
+    this.logger.debug(`waitForSelector ${selector} resolved`);
+    return resp;
   }
 
   public async waitFor<T>({ fn, args, toEqual }: { fn: EvalFn<T>; args: EvalArgs; toEqual: T }) {
@@ -108,6 +142,27 @@ export class HeadlessChromiumDriver {
       deviceScaleFactor: zoom,
       isMobile: false,
     });
+  }
+
+  private async launchDebugger() {
+    // In order to pause on execution we have to reach more deeply into Chromiums Devtools Protocol,
+    // and more specifically, for the page being used. _client is per-page, and puppeteer doesn't expose
+    // a page's client in their api, so we have to reach into internals to get this behavior.
+    // Finally, in order to get the inspector running, we have to know the page's internal ID (again, private)
+    // in order to construct the final debugging URL.
+
+    // @ts-ignore
+    await this.page._client.send('Debugger.enable');
+    // @ts-ignore
+    await this.page._client.send('Debugger.pause');
+    // @ts-ignore
+    const targetId = this.page._target._targetId;
+    const wsEndpoint = this.page.browser().wsEndpoint();
+    const { port } = parseUrl(wsEndpoint);
+
+    open(
+      `http://localhost:${port}/devtools/inspector.html?ws=localhost:${port}/devtools/page/${targetId}`
+    );
   }
 
   private _shouldUseCustomHeaders(conditions: ConditionalHeadersConditions, url: string) {

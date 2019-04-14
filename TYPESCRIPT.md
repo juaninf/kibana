@@ -4,8 +4,8 @@
 
 To convert existing code over to TypeScript:
 1. rename the file from `.js` to either `.ts` (if there is no html or jsx in the file) or `.tsx` (if there is).
-2. Ensure tslint is running and installed in the IDE of your choice.  There will usually be some linter errors after the file rename.
-3. Auto-fix what you can. This will save you a lot of time! VSCode can be set to auto fix tslint errors when files are saved.
+2. Ensure eslint is running and installed in the IDE of your choice.  There will usually be some linter errors after the file rename.
+3. Auto-fix what you can. This will save you a lot of time! VSCode can be set to auto fix eslint errors when files are saved.
 
 ### How to fix common TypeScript errors
 
@@ -14,12 +14,20 @@ The first thing that will probably happen when you convert a `.js` file in our s
 #### EUI component is missing types
 
 1. Check https://github.com/elastic/eui/issues/256 to see if they know it’s missing, if it’s not on there, add it.
-2. Temporarily get around the issue by using a declared module and exporting the missing types with the most basic types available. Bonus points if you write a PR yourself to the EUI repo to add the types, but having them available back in Kibana will take some time, as a new EUI release will need to be generated, then that new release pointed to in Kibana.  Best, to make forward progress, to do a temporary workaround.
+2. Temporarily get around the issue by adding the missing type in the `typings/@elastic/eui/index.d.ts` file. Bonus points if you write a PR yourself to the EUI repo to add the types, but having them available back in Kibana will take some time, as a new EUI release will need to be generated, then that new release pointed to in Kibana.  Best, to make forward progress, to do a temporary workaround.
 
 ```ts
+// typings/@elastic/eui/index.d.ts
+
 declare module '@elastic/eui' {
-  export const EuiPopoverTitle: React.SFC<any>;
+  // Add your types here
+  export const EuiPopoverTitle: React.SFC<EuiPopoverTitleProps>;
+  ...
 }
+```
+
+```ts
+// you can now import it in <your-plugin-file.ts>
 
 import { EuiPopoverTitle } from '@elastic/eui';
 ```
@@ -36,7 +44,8 @@ A `.d.ts` file is treated as a module if it contains any top-level `import` or `
 Since `@elastic/eui` already ships with a module declaration, any local additions must be performed using module augmentation, e.g.
 
 ```typescript
-// file `my_plugin/types/eui.d.ts`
+// file `typings/@elastic/eui/index.d.ts`
+
 import { CommonProps } from '@elastic/eui';
 import { SFC } from 'react';
 
@@ -102,7 +111,7 @@ If yarn doesn't find the module it may not have types.  For example, our `rison_
 
 1. Contribute types into the DefinitelyTyped repo itself, or
 2. Create a top level `types` folder and point to that in the tsconfig. For example, Infra team already handled this for `rison_node` and added: `x-pack/plugins/infra/types/rison_node.d.ts`. Other code uses it too so we will need to pull it up. Or,
-3. Add a `// @ts-ignore` line above the import. This should be used minimally, the above options are better. However, sometimes you have to resort to this method. For example, the `expect.js` module will require this line. We don't have type definitions installed for this library. Installing these types would conflict with the jest typedefs for expect, and since they aren't API compatible with each other, it's not possible to make both test frameworks happy. Since we are moving from mocha => jest, we don't see this is a big issue.
+3. Add a `// @ts-ignore` line above the import. This should be used minimally, the above options are better. However, sometimes you have to resort to this method.
 
 ### TypeScripting react files
 

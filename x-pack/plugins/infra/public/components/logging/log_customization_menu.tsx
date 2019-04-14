@@ -5,8 +5,10 @@
  */
 
 import { EuiButtonEmpty, EuiPopover } from '@elastic/eui';
+import { FormattedMessage } from '@kbn/i18n/react';
 import * as React from 'react';
-import styled from 'styled-components';
+
+import euiStyled from '../../../../../common/eui_styled_components';
 
 interface LogCustomizationMenuState {
   isShown: boolean;
@@ -40,8 +42,11 @@ export class LogCustomizationMenu extends React.Component<{}, LogCustomizationMe
     const { isShown } = this.state;
 
     const menuButton = (
-      <EuiButtonEmpty color="text" iconType="gear" onClick={this.toggleVisibility} size="xs">
-        Customize
+      <EuiButtonEmpty color="text" iconType="eye" onClick={this.toggleVisibility} size="xs">
+        <FormattedMessage
+          id="xpack.infra.logs.customizeLogs.customizeButtonLabel"
+          defaultMessage="Customize"
+        />
       </EuiButtonEmpty>
     );
 
@@ -60,6 +65,6 @@ export class LogCustomizationMenu extends React.Component<{}, LogCustomizationMe
   }
 }
 
-const CustomizationMenuContent = styled.div`
+const CustomizationMenuContent = euiStyled.div`
   min-width: 200px;
 `;

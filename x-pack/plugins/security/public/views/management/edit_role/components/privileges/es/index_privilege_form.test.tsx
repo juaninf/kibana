@@ -22,13 +22,14 @@ test('it renders without crashing', () => {
     formIndex: 0,
     indexPatterns: [],
     availableFields: [],
-    isReservedRole: false,
+    isReadOnlyRole: false,
     allowDelete: true,
     allowDocumentLevelSecurity: true,
     allowFieldLevelSecurity: true,
     validator: new RoleValidator(),
     onChange: jest.fn(),
     onDelete: jest.fn(),
+    intl: {} as any,
   };
 
   const wrapper = shallowWithIntl(<IndexPrivilegeForm {...props} />);
@@ -48,13 +49,14 @@ describe('delete button', () => {
     formIndex: 0,
     indexPatterns: [],
     availableFields: [],
-    isReservedRole: false,
+    isReadOnlyRole: false,
     allowDelete: true,
     allowDocumentLevelSecurity: true,
     allowFieldLevelSecurity: true,
     validator: new RoleValidator(),
     onChange: jest.fn(),
     onDelete: jest.fn(),
+    intl: {} as any,
   };
 
   test('it is hidden when allowDelete is false', () => {
@@ -99,13 +101,14 @@ describe(`document level security`, () => {
     formIndex: 0,
     indexPatterns: [],
     availableFields: [],
-    isReservedRole: false,
+    isReadOnlyRole: false,
     allowDelete: true,
     allowDocumentLevelSecurity: true,
     allowFieldLevelSecurity: true,
     validator: new RoleValidator(),
     onChange: jest.fn(),
     onDelete: jest.fn(),
+    intl: {} as any,
   };
 
   test(`inputs are hidden when DLS is not allowed`, () => {
@@ -157,13 +160,14 @@ describe('field level security', () => {
     formIndex: 0,
     indexPatterns: [],
     availableFields: [],
-    isReservedRole: false,
+    isReadOnlyRole: false,
     allowDelete: true,
     allowDocumentLevelSecurity: true,
     allowFieldLevelSecurity: true,
     validator: new RoleValidator(),
     onChange: jest.fn(),
     onDelete: jest.fn(),
+    intl: {} as any,
   };
 
   test(`input is hidden when FLS is not allowed`, () => {

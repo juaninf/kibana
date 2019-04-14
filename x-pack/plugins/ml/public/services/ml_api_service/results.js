@@ -21,8 +21,10 @@ export const results = {
     threshold,
     earliestMs,
     latestMs,
+    dateFormatTz,
     maxRecords,
-    maxExamples) {
+    maxExamples,
+    influencersFilterQuery) {
 
     return http({
       url: `${basePath}/results/anomalies_table_data`,
@@ -35,8 +37,10 @@ export const results = {
         threshold,
         earliestMs,
         latestMs,
+        dateFormatTz,
         maxRecords,
-        maxExamples
+        maxExamples,
+        influencersFilterQuery
       }
     });
   },

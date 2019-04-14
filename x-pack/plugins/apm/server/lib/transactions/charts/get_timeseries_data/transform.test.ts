@@ -4,32 +4,20 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
-import { first, last } from 'lodash';
 import { timeseriesResponse } from './mock-responses/timeseries_response';
 import {
+  ApmTimeSeriesResponse,
   getTpmBuckets,
-  TimeSeriesAPIResponse,
   timeseriesTransformer
 } from './transform';
 
 describe('timeseriesTransformer', () => {
-  let res: TimeSeriesAPIResponse;
+  let res: ApmTimeSeriesResponse;
   beforeEach(async () => {
     res = await timeseriesTransformer({
       timeseriesResponse,
-      avgAnomaliesResponse: undefined,
       bucketSize: 12
     });
-  });
-
-  it('should not contain first and last bucket', () => {
-    const mockDates = timeseriesResponse.aggregations.transaction_results.buckets[0].timeseries.buckets.map(
-      bucket => bucket.key
-    );
-
-    expect(res.dates).not.toContain(first(mockDates));
-    expect(res.dates).not.toContain(last(mockDates));
-    expect(res.tpmBuckets[0].values).toHaveLength(res.dates.length);
   });
 
   it('should have correct order', () => {
@@ -73,7 +61,7 @@ describe('getTpmBuckets', () => {
             {
               key_as_string: '',
               key: 3,
-              doc_count: 1337
+              doc_count: 400
             }
           ]
         }
@@ -101,7 +89,7 @@ describe('getTpmBuckets', () => {
             {
               key_as_string: '',
               key: 3,
-              doc_count: 1337
+              doc_count: 300
             }
           ]
         }
@@ -109,8 +97,24 @@ describe('getTpmBuckets', () => {
     ];
     const bucketSize = 10;
     expect(getTpmBuckets(buckets, bucketSize)).toEqual([
-      { avg: 1500, key: 'HTTP 4xx', values: [1200, 1800] },
-      { avg: 1800, key: 'HTTP 5xx', values: [3000, 600] }
+      {
+        dataPoints: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1200 },
+          { x: 2, y: 1800 },
+          { x: 3, y: 2400 }
+        ],
+        key: 'HTTP 4xx'
+      },
+      {
+        dataPoints: [
+          { x: 0, y: 0 },
+          { x: 1, y: 3000 },
+          { x: 2, y: 600 },
+          { x: 3, y: 1800 }
+        ],
+        key: 'HTTP 5xx'
+      }
     ]);
   });
 });

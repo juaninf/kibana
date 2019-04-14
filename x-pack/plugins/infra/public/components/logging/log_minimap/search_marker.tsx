@@ -4,9 +4,10 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
+import { FormattedMessage } from '@kbn/i18n/react';
 import * as React from 'react';
-import styled, { keyframes } from 'styled-components';
 
+import euiStyled, { keyframes } from '../../../../../../common/eui_styled_components';
 import { LogEntryTime } from '../../../../common/log_entry';
 import { SearchSummaryBucket } from '../../../../common/log_search_summary';
 import { SearchMarkerTooltip } from './search_marker_tooltip';
@@ -70,7 +71,13 @@ export class SearchMarker extends React.PureComponent<SearchMarkerProps, SearchM
       <>
         {hoveredPosition ? (
           <SearchMarkerTooltip markerPosition={hoveredPosition}>
-            {bucket.count} {bucket.count === 1 ? 'search result' : 'search results'}
+            <FormattedMessage
+              id="xpack.infra.logs.searchResultTooltip"
+              defaultMessage="{bucketCount, plural, one {# search result} other {# search results}}"
+              values={{
+                bucketCount: bucket.count,
+              }}
+            />
           </SearchMarkerTooltip>
         ) : null}
         <SearchMarkerGroup
@@ -95,11 +102,11 @@ const fadeInAnimation = keyframes`
   }
 `;
 
-const SearchMarkerGroup = styled.g`
+const SearchMarkerGroup = euiStyled.g`
   animation: ${fadeInAnimation} ${props => props.theme.eui.euiAnimSpeedExtraSlow} ease-in both;
 `;
 
-const SearchMarkerBackgroundRect = styled.rect`
+const SearchMarkerBackgroundRect = euiStyled.rect`
   fill: ${props => props.theme.eui.euiColorSecondary};
   opacity: 0;
   transition: opacity ${props => props.theme.eui.euiAnimSpeedNormal} ease-in;
@@ -109,6 +116,6 @@ const SearchMarkerBackgroundRect = styled.rect`
   }
 `;
 
-const SearchMarkerForegroundRect = styled.rect`
+const SearchMarkerForegroundRect = euiStyled.rect`
   fill: ${props => props.theme.eui.euiColorSecondary};
 `;

@@ -4,27 +4,30 @@
  * you may not use this file except in compliance with the Elastic License.
  */
 
+import theme from '@elastic/eui/dist/eui_theme_light.json';
+import { i18n } from '@kbn/i18n';
 import d3 from 'd3';
-import { difference, last, memoize, zipObject } from 'lodash';
+import { difference, memoize, zipObject } from 'lodash';
+import mean from 'lodash.mean';
 import { rgba } from 'polished';
-import { AvgAnomalyBucket } from 'x-pack/plugins/apm/server/lib/transactions/charts/get_avg_response_time_anomalies/get_anomaly_aggs/transform';
-import { TimeSeriesAPIResponse } from 'x-pack/plugins/apm/server/lib/transactions/charts/get_timeseries_data/transform';
-import { StringMap } from 'x-pack/plugins/apm/typings/common';
-import { colors } from '../../style/variables';
-import { asDecimal, asMillis, tpmUnit } from '../../utils/formatters';
+import { MetricsChartAPIResponse } from '../../../server/lib/metrics/get_all_metrics_chart_data';
+import { TimeSeriesAPIResponse } from '../../../server/lib/transactions/charts';
+import { ApmTimeSeriesResponse } from '../../../server/lib/transactions/charts/get_timeseries_data/transform';
+import { StringMap } from '../../../typings/common';
+import { Coordinate, RectCoordinate } from '../../../typings/timeseries';
+import {
+  asDecimal,
+  asMillis,
+  asPercent,
+  tpmUnit
+} from '../../utils/formatters';
 import { IUrlParams } from '../urlParams';
 
-interface Coordinate {
-  x: number;
-  y?: number | null;
-}
-
-interface BoundaryCoordinate extends Coordinate {
-  y0: number | null;
-}
-
 export const getEmptySerie = memoize(
-  (start = Date.now() - 3600000, end = Date.now()) => {
+  (
+    start: string | number = Date.now() - 3600000,
+    end: string | number = Date.now()
+  ) => {
     const dates = d3.time
       .scale()
       .domain([new Date(start), new Date(end)])
@@ -39,28 +42,151 @@ export const getEmptySerie = memoize(
       }
     ];
   },
-  (start: number, end: number) => [start, end].join('_')
+  (start: string, end: string) => [start, end].join('_')
 );
 
-export function getCharts(
-  urlParams: IUrlParams,
-  charts: TimeSeriesAPIResponse
-) {
-  const { start, end, transactionType } = urlParams;
-  const noHits = charts.totalHits === 0;
+interface IEmptySeries {
+  data: Coordinate[];
+}
+
+export interface ITpmBucket {
+  title: string;
+  data: Coordinate[];
+  legendValue: string;
+  type: string;
+  color: string;
+}
+
+export interface ITransactionChartData {
+  noHits: boolean;
+  tpmSeries: ITpmBucket[] | IEmptySeries[];
+  responseTimeSeries: TimeSerie[] | IEmptySeries[];
+  hasMLJob: boolean;
+}
+
+const INITIAL_DATA = {
+  apmTimeseries: {
+    totalHits: 0,
+    responseTimes: {
+      avg: [],
+      p95: [],
+      p99: []
+    },
+    tpmBuckets: [],
+    overallAvgDuration: undefined
+  },
+  anomalyTimeseries: undefined
+};
+
+export function getTransactionCharts(
+  { start, end, transactionType }: IUrlParams,
+  { apmTimeseries, anomalyTimeseries }: TimeSeriesAPIResponse = INITIAL_DATA
+): ITransactionChartData {
+  const noHits = apmTimeseries.totalHits === 0;
   const tpmSeries = noHits
     ? getEmptySerie(start, end)
-    : getTpmSeries(charts, transactionType);
+    : getTpmSeries(apmTimeseries, transactionType);
 
   const responseTimeSeries = noHits
     ? getEmptySerie(start, end)
-    : getResponseTimeSeries(charts);
+    : getResponseTimeSeries({ apmTimeseries, anomalyTimeseries });
 
   return {
     noHits,
     tpmSeries,
-    responseTimeSeries
+    responseTimeSeries,
+    hasMLJob: anomalyTimeseries !== undefined
   };
+}
+
+export type MemoryMetricSeries = ReturnType<typeof getMemorySeries>;
+
+export function getMemorySeries(
+  { start, end }: IUrlParams,
+  memoryChartResponse: MetricsChartAPIResponse['memory']
+) {
+  const { series, overallValues, totalHits } = memoryChartResponse;
+  const seriesList =
+    totalHits === 0
+      ? getEmptySerie(start, end)
+      : [
+          {
+            title: i18n.translate(
+              'xpack.apm.chart.memorySeries.systemMaxLabel',
+              {
+                defaultMessage: 'System max'
+              }
+            ),
+            data: series.memoryUsedMax,
+            type: 'linemark',
+            color: theme.euiColorVis1,
+            legendValue: asPercent(overallValues.memoryUsedMax || 0, 1)
+          },
+          {
+            title: i18n.translate(
+              'xpack.apm.chart.memorySeries.systemAverageLabel',
+              {
+                defaultMessage: 'System average'
+              }
+            ),
+            data: series.memoryUsedAvg,
+            type: 'linemark',
+            color: theme.euiColorVis0,
+            legendValue: asPercent(overallValues.memoryUsedAvg || 0, 1)
+          }
+        ];
+
+  return {
+    totalHits: memoryChartResponse.totalHits,
+    series: seriesList
+  };
+}
+
+export type CPUMetricSeries = ReturnType<typeof getCPUSeries>;
+
+export function getCPUSeries(CPUChartResponse: MetricsChartAPIResponse['cpu']) {
+  const { series, overallValues } = CPUChartResponse;
+
+  const seriesList: TimeSerie[] = [
+    {
+      title: i18n.translate('xpack.apm.chart.cpuSeries.systemMaxLabel', {
+        defaultMessage: 'System max'
+      }),
+      data: series.systemCPUMax,
+      type: 'linemark',
+      color: theme.euiColorVis1,
+      legendValue: asPercent(overallValues.systemCPUMax || 0, 1)
+    },
+    {
+      title: i18n.translate('xpack.apm.chart.cpuSeries.systemAverageLabel', {
+        defaultMessage: 'System average'
+      }),
+      data: series.systemCPUAverage,
+      type: 'linemark',
+      color: theme.euiColorVis0,
+      legendValue: asPercent(overallValues.systemCPUAverage || 0, 1)
+    },
+    {
+      title: i18n.translate('xpack.apm.chart.cpuSeries.processMaxLabel', {
+        defaultMessage: 'Process max'
+      }),
+      data: series.processCPUMax,
+      type: 'linemark',
+      color: theme.euiColorVis7,
+      legendValue: asPercent(overallValues.processCPUMax || 0, 1)
+    },
+    {
+      title: i18n.translate('xpack.apm.chart.cpuSeries.processAverageLabel', {
+        defaultMessage: 'Process average'
+      }),
+      data: series.processCPUAverage,
+      type: 'linemark',
+      color: theme.euiColorVis5,
+      legendValue: asPercent(overallValues.processCPUAverage || 0, 1)
+    }
+  ];
+
+  return { totalHits: CPUChartResponse.totalHits, series: seriesList };
 }
 
 interface TimeSerie {
@@ -68,97 +194,115 @@ interface TimeSerie {
   titleShort?: string;
   hideLegend?: boolean;
   hideTooltipValue?: boolean;
-  data: Coordinate[];
+  data: Array<Coordinate | RectCoordinate>;
   legendValue?: string;
   type: string;
   color: string;
   areaColor?: string;
 }
 
-export function getResponseTimeSeries(chartsData: TimeSeriesAPIResponse) {
-  const { dates, overallAvgDuration } = chartsData;
-  const { avg, p95, p99, avgAnomalies } = chartsData.responseTimes;
+export function getResponseTimeSeries({
+  apmTimeseries,
+  anomalyTimeseries
+}: TimeSeriesAPIResponse) {
+  const { overallAvgDuration } = apmTimeseries;
+  const { avg, p95, p99 } = apmTimeseries.responseTimes;
 
   const series: TimeSerie[] = [
     {
-      title: 'Avg.',
-      data: getChartValues(dates, avg),
+      title: i18n.translate('xpack.apm.transactions.chart.averageLabel', {
+        defaultMessage: 'Avg.'
+      }),
+      data: avg,
       legendValue: asMillis(overallAvgDuration),
-      type: 'line',
-      color: colors.apmBlue
+      type: 'linemark',
+      color: theme.euiColorVis1
     },
     {
-      title: '95th percentile',
+      title: i18n.translate(
+        'xpack.apm.transactions.chart.95thPercentileLabel',
+        {
+          defaultMessage: '95th percentile'
+        }
+      ),
       titleShort: '95th',
-      data: getChartValues(dates, p95),
-      type: 'line',
-      color: colors.apmYellow
+      data: p95,
+      type: 'linemark',
+      color: theme.euiColorVis5
     },
     {
-      title: '99th percentile',
+      title: i18n.translate(
+        'xpack.apm.transactions.chart.99thPercentileLabel',
+        {
+          defaultMessage: '99th percentile'
+        }
+      ),
       titleShort: '99th',
-      data: getChartValues(dates, p99),
-      type: 'line',
-      color: colors.apmOrange
+      data: p99,
+      type: 'linemark',
+      color: theme.euiColorVis7
     }
   ];
 
-  if (avgAnomalies) {
-    // insert after Avg. serie
-    series.splice(1, 0, {
-      title: 'Anomaly Boundaries',
-      hideLegend: true,
-      hideTooltipValue: true,
-      data: getAnomalyBoundaryValues(
-        dates,
-        avgAnomalies.buckets,
-        avgAnomalies.bucketSizeAsMillis
-      ),
-      type: 'area',
-      color: 'none',
-      areaColor: rgba(colors.apmBlue, 0.1)
-    });
-
-    series.splice(1, 0, {
-      title: 'Anomaly score',
-      hideLegend: true,
-      hideTooltipValue: true,
-      data: getAnomalyScoreValues(
-        dates,
-        avgAnomalies.buckets,
-        avgAnomalies.bucketSizeAsMillis
-      ),
-      type: 'areaMaxHeight',
-      color: 'none',
-      areaColor: rgba(colors.apmRed, 0.1)
-    });
+  if (anomalyTimeseries) {
+    // insert after Avg. series
+    series.splice(
+      1,
+      0,
+      getAnomalyBoundariesSeries(anomalyTimeseries.anomalyBoundaries),
+      getAnomalyScoreSeries(anomalyTimeseries.anomalyScore)
+    );
   }
 
   return series;
 }
 
+export function getAnomalyScoreSeries(data: RectCoordinate[]) {
+  return {
+    title: i18n.translate('xpack.apm.transactions.chart.anomalyScoreLabel', {
+      defaultMessage: 'Anomaly score'
+    }),
+    hideLegend: true,
+    hideTooltipValue: true,
+    data,
+    type: 'areaMaxHeight',
+    color: 'none',
+    areaColor: rgba(theme.euiColorVis9, 0.1)
+  };
+}
+
+function getAnomalyBoundariesSeries(data: Coordinate[]) {
+  return {
+    title: i18n.translate(
+      'xpack.apm.transactions.chart.anomalyBoundariesLabel',
+      {
+        defaultMessage: 'Anomaly Boundaries'
+      }
+    ),
+    hideLegend: true,
+    hideTooltipValue: true,
+    data,
+    type: 'area',
+    color: 'none',
+    areaColor: rgba(theme.euiColorVis1, 0.1)
+  };
+}
+
 export function getTpmSeries(
-  chartsData: TimeSeriesAPIResponse,
+  apmTimeseries: ApmTimeSeriesResponse,
   transactionType?: string
 ) {
-  const { dates, tpmBuckets } = chartsData;
+  const { tpmBuckets } = apmTimeseries;
   const bucketKeys = tpmBuckets.map(({ key }) => key);
   const getColor = getColorByKey(bucketKeys);
-  const getTpmLegendTitle = (bucketKey: string) => {
-    // hide legend text for transactions without "result"
-    if (bucketKey === 'transaction_result_missing') {
-      return '';
-    }
-
-    return bucketKey;
-  };
 
   return tpmBuckets.map(bucket => {
+    const avg = mean(bucket.dataPoints.map(p => p.y));
     return {
-      title: getTpmLegendTitle(bucket.key),
-      data: getChartValues(dates, bucket.values),
-      legendValue: `${asDecimal(bucket.avg)} ${tpmUnit(transactionType || '')}`,
-      type: 'line',
+      title: bucket.key,
+      data: bucket.dataPoints,
+      legendValue: `${asDecimal(avg)} ${tpmUnit(transactionType || '')}`,
+      type: 'linemark',
       color: getColor(bucket.key)
     };
   });
@@ -166,103 +310,21 @@ export function getTpmSeries(
 
 function getColorByKey(keys: string[]) {
   const assignedColors: StringMap<string> = {
-    'HTTP 2xx': colors.apmGreen,
-    'HTTP 3xx': colors.apmYellow,
-    'HTTP 4xx': colors.apmOrange,
-    'HTTP 5xx': colors.apmRed2
+    'HTTP 2xx': theme.euiColorVis0,
+    'HTTP 3xx': theme.euiColorVis5,
+    'HTTP 4xx': theme.euiColorVis7,
+    'HTTP 5xx': theme.euiColorVis2
   };
 
   const unknownKeys = difference(keys, Object.keys(assignedColors));
   const unassignedColors: StringMap<string> = zipObject(unknownKeys, [
-    colors.apmBlue,
-    colors.apmPurple,
-    colors.apmPink,
-    colors.apmTan,
-    colors.apmRed,
-    colors.apmBrown
+    theme.euiColorVis1,
+    theme.euiColorVis3,
+    theme.euiColorVis4,
+    theme.euiColorVis6,
+    theme.euiColorVis2,
+    theme.euiColorVis8
   ]);
 
   return (key: string) => assignedColors[key] || unassignedColors[key];
-}
-
-function getChartValues(
-  dates: number[] = [],
-  buckets: Array<number | null> = []
-) {
-  return dates.map((x, i) => ({
-    x,
-    y: buckets[i]
-  }));
-}
-
-export function getAnomalyScoreValues(
-  dates: number[] = [],
-  buckets: AvgAnomalyBucket[] = [],
-  bucketSizeAsMillis: number
-) {
-  const ANOMALY_THRESHOLD = 75;
-  const getX = (currentX: number, i: number) =>
-    currentX + bucketSizeAsMillis * i;
-
-  return dates
-    .map((date, i) => {
-      const { anomalyScore } = buckets[i];
-      return {
-        x: date,
-        anomalyScore
-      };
-    })
-    .filter(p => {
-      const res =
-        p && p.anomalyScore != null && p.anomalyScore > ANOMALY_THRESHOLD;
-      return res;
-    })
-    .reduce<Coordinate[]>((acc, p, i, points) => {
-      const nextPoint = points[i + 1] || {};
-      const endX = getX(p.x, 1);
-      acc.push({ x: p.x, y: 1 });
-      if (nextPoint.x == null || nextPoint.x > endX) {
-        acc.push(
-          {
-            x: endX,
-            y: 1
-          },
-          {
-            x: getX(p.x, 2)
-          }
-        );
-      }
-
-      return acc;
-    }, []);
-}
-
-export function getAnomalyBoundaryValues(
-  dates: number[] = [],
-  buckets: AvgAnomalyBucket[] = [],
-  bucketSizeAsMillis: number
-) {
-  const lastX = last(dates);
-  return dates
-    .map((date, i) => {
-      const bucket = buckets[i];
-      return {
-        x: date,
-        y0: bucket.lower,
-        y: bucket.upper
-      };
-    })
-    .filter(p => p.y != null)
-    .reduce<BoundaryCoordinate[]>((acc, p, i, points) => {
-      const isLast = last(points) === p;
-      acc.push(p);
-
-      if (isLast) {
-        acc.push({
-          ...p,
-          x: Math.min(p.x + bucketSizeAsMillis, lastX) // avoid going beyond the last date
-        });
-      }
-      return acc;
-    }, []);
 }

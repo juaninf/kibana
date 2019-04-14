@@ -26,7 +26,7 @@ const OPEN_INSPECTOR_TEST_SUBJ = 'dashboardPanelAction-openInspector';
 
 export function DashboardPanelActionsProvider({ getService, getPageObjects }) {
   const log = getService('log');
-  const remote = getService('remote');
+  const browser = getService('browser');
   const testSubjects = getService('testSubjects');
   const PageObjects = getPageObjects(['header', 'common']);
 
@@ -45,7 +45,7 @@ export function DashboardPanelActionsProvider({ getService, getPageObjects }) {
 
     async toggleContextMenu(parent) {
       log.debug('toggleContextMenu');
-      await (parent ? remote.moveMouseTo(parent) : testSubjects.moveMouseTo('dashboardPanelTitle'));
+      await (parent ? browser.moveMouseTo(parent) : testSubjects.moveMouseTo('dashboardPanelTitle'));
       const toggleMenuItem = await this.findContextMenu(parent);
       await toggleMenuItem.click();
     }
@@ -86,6 +86,11 @@ export function DashboardPanelActionsProvider({ getService, getPageObjects }) {
     async customizePanel(parent) {
       await this.openContextMenu(parent);
       await testSubjects.click(CUSTOMIZE_PANEL_DATA_TEST_SUBJ);
+    }
+
+    async openInspectorByTitle(title) {
+      const header = await this.getPanelHeading(title);
+      await this.openInspector(header);
     }
 
     async openInspector(parent) {

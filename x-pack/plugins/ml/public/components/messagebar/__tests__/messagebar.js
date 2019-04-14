@@ -7,7 +7,7 @@
 
 
 import ngMock from 'ng_mock';
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 
 describe('ML - Message Bar Controller', () => {
   beforeEach(() => {
@@ -17,7 +17,10 @@ describe('ML - Message Bar Controller', () => {
   it('Initialize Message Bar Controller', (done) => {
     ngMock.inject(function ($rootScope, $controller) {
       const scope = $rootScope.$new();
-      $controller('MlMessageBarController', { $scope: scope });
+
+      expect(() => {
+        $controller('MlMessageBarController', { $scope: scope });
+      }).to.not.throwError();
 
       expect(scope.messages).to.eql([]);
       done();

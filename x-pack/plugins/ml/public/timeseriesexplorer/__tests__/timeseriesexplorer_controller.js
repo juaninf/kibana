@@ -7,7 +7,7 @@
 
 
 import ngMock from 'ng_mock';
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 
 describe('ML - Time Series Explorer Controller', () => {
   beforeEach(() => {
@@ -17,7 +17,10 @@ describe('ML - Time Series Explorer Controller', () => {
   it('Initialize Time Series Explorer Controller', (done) => {
     ngMock.inject(function ($rootScope, $controller) {
       const scope = $rootScope.$new();
-      $controller('MlTimeSeriesExplorerController', { $scope: scope });
+
+      expect(() => {
+        $controller('MlTimeSeriesExplorerController', { $scope: scope });
+      }).to.not.throwError();
 
       expect(scope.timeFieldName).to.eql('timestamp');
       done();

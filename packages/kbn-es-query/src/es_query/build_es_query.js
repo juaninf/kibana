@@ -22,30 +22,39 @@ import { buildQueryFromKuery } from './from_kuery';
 import { buildQueryFromFilters } from './from_filters';
 import { buildQueryFromLucene } from './from_lucene';
 
-export function BuildESQueryProvider(config) {
+/**
+ * @param indexPattern
+ * @param queries - a query object or array of query objects. Each query has a language property and a query property.
+ * @param filters - a filter object or array of filter objects
+ * @param config - an objects with query:allowLeadingWildcards and query:queryString:options UI
+ * settings in form of { allowLeadingWildcards, queryStringOptions }
+ * config contains dateformat:tz
+ */
+export function buildEsQuery(
+  indexPattern,
+  queries = [],
+  filters = [],
+  config = {
+    allowLeadingWildcards: false,
+    queryStringOptions: {},
+    ignoreFilterIfFieldNotInIndex: false,
+    dateFormatTZ: null,
+  }) {
+  queries = Array.isArray(queries) ? queries : [queries];
+  filters = Array.isArray(filters) ? filters : [filters];
 
-  /**
-   *
-   * @param queries - an array of query objects. Each query has a language property and a query property.
-   * @param filters - an array of filter objects
-   */
-  function buildESQuery(indexPattern, queries = [], filters = []) {
-    const validQueries = queries.filter((query) => has(query, 'query'));
-    const queriesByLanguage = groupBy(validQueries, 'language');
+  const validQueries = queries.filter((query) => has(query, 'query'));
+  const queriesByLanguage = groupBy(validQueries, 'language');
+  const kueryQuery = buildQueryFromKuery(indexPattern, queriesByLanguage.kuery, config.allowLeadingWildcards, config.dateFormatTZ);
+  const luceneQuery = buildQueryFromLucene(queriesByLanguage.lucene, config.queryStringOptions, config.dateFormatTZ);
+  const filterQuery = buildQueryFromFilters(filters, indexPattern, config.ignoreFilterIfFieldNotInIndex);
 
-    const kueryQuery = buildQueryFromKuery(indexPattern, queriesByLanguage.kuery, config);
-    const luceneQuery = buildQueryFromLucene(queriesByLanguage.lucene, config);
-    const filterQuery = buildQueryFromFilters(filters, indexPattern);
-
-    return {
-      bool: {
-        must: [].concat(kueryQuery.must, luceneQuery.must, filterQuery.must),
-        filter: [].concat(kueryQuery.filter, luceneQuery.filter, filterQuery.filter),
-        should: [].concat(kueryQuery.should, luceneQuery.should, filterQuery.should),
-        must_not: [].concat(kueryQuery.must_not, luceneQuery.must_not, filterQuery.must_not),
-      }
-    };
-  }
-
-  return buildESQuery;
+  return {
+    bool: {
+      must: [].concat(kueryQuery.must, luceneQuery.must, filterQuery.must),
+      filter: [].concat(kueryQuery.filter, luceneQuery.filter, filterQuery.filter),
+      should: [].concat(kueryQuery.should, luceneQuery.should, filterQuery.should),
+      must_not: [].concat(kueryQuery.must_not, luceneQuery.must_not, filterQuery.must_not),
+    }
+  };
 }

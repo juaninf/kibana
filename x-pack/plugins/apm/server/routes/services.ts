@@ -5,52 +5,44 @@
  */
 
 import Boom from 'boom';
-import { Server } from 'hapi';
-import {
-  AgentName,
-  createApmTelementry,
-  storeApmTelemetry
-} from '../lib/apm_telemetry';
+import { CoreSetup } from 'src/core/server';
+import { AgentName } from '../../typings/es_schemas/ui/fields/Agent';
+import { createApmTelementry, storeApmTelemetry } from '../lib/apm_telemetry';
 import { withDefaultValidators } from '../lib/helpers/input_validation';
 import { setupRequest } from '../lib/helpers/setup_request';
 import { getService } from '../lib/services/get_service';
 import { getServices } from '../lib/services/get_services';
 
 const ROOT = '/api/apm/services';
-const pre = [{ method: setupRequest, assign: 'setup' }];
 const defaultErrorHandler = (err: Error) => {
-  // tslint:disable-next-line
+  // eslint-disable-next-line
   console.error(err.stack);
   throw Boom.boomify(err, { statusCode: 400 });
 };
 
-export function initServicesApi(server: Server) {
+export function initServicesApi(core: CoreSetup) {
+  const { server } = core.http;
   server.route({
     method: 'GET',
     path: ROOT,
     options: {
-      pre,
       validate: {
         query: withDefaultValidators()
-      }
+      },
+      tags: ['access:apm']
     },
     handler: async req => {
-      const { setup } = req.pre;
+      const setup = setupRequest(req);
+      const services = await getServices(setup).catch(defaultErrorHandler);
 
-      let serviceBucketList;
-      try {
-        serviceBucketList = await getServices(setup);
-      } catch (error) {
-        return defaultErrorHandler(error);
-      }
-
-      // Store telemetry data derived from serviceBucketList
-      const apmTelemetry = createApmTelementry(
-        serviceBucketList.map(({ agentName }) => agentName as AgentName)
+      // Store telemetry data derived from services
+      const agentNames = services.items.map(
+        ({ agentName }) => agentName as AgentName
       );
+      const apmTelemetry = createApmTelementry(agentNames);
       storeApmTelemetry(server, apmTelemetry);
 
-      return serviceBucketList;
+      return services;
     }
   });
 
@@ -58,13 +50,13 @@ export function initServicesApi(server: Server) {
     method: 'GET',
     path: `${ROOT}/{serviceName}`,
     options: {
-      pre,
       validate: {
         query: withDefaultValidators()
-      }
+      },
+      tags: ['access:apm']
     },
     handler: req => {
-      const { setup } = req.pre;
+      const setup = setupRequest(req);
       const { serviceName } = req.params;
       return getService(serviceName, setup).catch(defaultErrorHandler);
     }

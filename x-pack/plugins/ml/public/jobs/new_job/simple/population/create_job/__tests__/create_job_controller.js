@@ -7,7 +7,7 @@
 
 
 import ngMock from 'ng_mock';
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 import sinon from 'sinon';
 
 // Import this way to be able to stub/mock functions later on in the tests using sinon.
@@ -32,7 +32,10 @@ describe('ML - Population Wizard - Create Job Controller', () => {
       };
 
       const scope = $rootScope.$new();
-      $controller('MlCreatePopulationJob', { $scope: scope });
+
+      expect(() => {
+        $controller('MlCreatePopulationJob', { $scope: scope });
+      }).to.not.throwError();
 
       expect(typeof scope.ui).to.eql('object');
       stub1.restore();

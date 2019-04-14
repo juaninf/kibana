@@ -25,22 +25,32 @@ import {
   EuiProgress,
   EuiSpacer,
   EuiTextColor,
+  EuiToolTip,
+  EuiFilePicker,
+  EuiEmptyPrompt,
 } from '@elastic/eui';
 import { ConfirmModal } from '../confirm_modal';
 import { Clipboard } from '../clipboard';
 import { Download } from '../download';
+import { Loading } from '../loading';
+import { ASSET_MAX_SIZE } from '../../../common/lib/constants';
 
 export class AssetManager extends React.PureComponent {
   static propTypes = {
-    assets: PropTypes.array,
-    removeAsset: PropTypes.func,
-    copyAsset: PropTypes.func,
+    assetValues: PropTypes.array,
+    addImageElement: PropTypes.func,
+    removeAsset: PropTypes.func.isRequired,
+    copyAsset: PropTypes.func.isRequired,
+    onAssetAdd: PropTypes.func.isRequired,
   };
 
   state = {
     deleteId: null,
     isModalVisible: false,
+    loading: false,
   };
+
+  _isMounted = true;
 
   showModal = () => this.setState({ isModalVisible: true });
   closeModal = () => this.setState({ isModalVisible: false });
@@ -48,6 +58,17 @@ export class AssetManager extends React.PureComponent {
   doDelete = () => {
     this.resetDelete();
     this.props.removeAsset(this.state.deleteId);
+  };
+
+  handleFileUpload = files => {
+    this.setState({ loading: true });
+    Promise.all(Array.from(files).map(file => this.props.onAssetAdd(file))).finally(() => {
+      this._isMounted && this.setState({ loading: false });
+    });
+  };
+
+  addElement = assetId => {
+    this.props.addImageElement(assetId);
   };
 
   resetDelete = () => this.setState({ deleteId: null });
@@ -81,31 +102,44 @@ export class AssetManager extends React.PureComponent {
         <EuiSpacer size="s" />
 
         <EuiFlexGroup alignItems="baseline" justifyContent="center" responsive={false}>
-          <EuiFlexItem className="asset-download" grow={false}>
-            <Download fileName={asset.id} content={asset.value}>
-              <EuiButtonIcon iconType="sortDown" aria-label="Download" title="Download" />
-            </Download>
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <Clipboard
-              content={asset.id}
-              onCopy={result => result && this.props.copyAsset(asset.id)}
-            >
+          <EuiFlexItem className="asset-create-image" grow={false}>
+            <EuiToolTip content="Create image element">
               <EuiButtonIcon
-                iconType="copyClipboard"
-                aria-label="Copy to clipboard"
-                title="Copy to clipboard"
+                iconType="vector"
+                aria-label="Create image element"
+                onClick={() => {
+                  this.addElement(asset.id);
+                  this.closeModal();
+                }}
               />
-            </Clipboard>
+            </EuiToolTip>
+          </EuiFlexItem>
+          <EuiFlexItem className="asset-download" grow={false}>
+            <EuiToolTip content="Download">
+              <Download fileName={asset.id} content={asset.value}>
+                <EuiButtonIcon iconType="sortDown" aria-label="Download" />
+              </Download>
+            </EuiToolTip>
           </EuiFlexItem>
           <EuiFlexItem grow={false}>
-            <EuiButtonIcon
-              title="Delete asset"
-              color="danger"
-              iconType="trash"
-              aria-label="Delete asset"
-              onClick={() => this.setState({ deleteId: asset.id })}
-            />
+            <EuiToolTip content="Copy id to clipboard">
+              <Clipboard
+                content={asset.id}
+                onCopy={result => result && this.props.copyAsset(asset.id)}
+              >
+                <EuiButtonIcon iconType="copyClipboard" aria-label="Copy id to clipboard" />
+              </Clipboard>
+            </EuiToolTip>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiToolTip content="Delete">
+              <EuiButtonIcon
+                color="danger"
+                iconType="trash"
+                aria-label="Delete"
+                onClick={() => this.setState({ deleteId: asset.id })}
+              />
+            </EuiToolTip>
           </EuiFlexItem>
         </EuiFlexGroup>
       </EuiPanel>
@@ -113,15 +147,24 @@ export class AssetManager extends React.PureComponent {
   );
 
   render() {
-    const { isModalVisible } = this.state;
-
-    const assetMaxLimit = 25000;
+    const { isModalVisible, loading } = this.state;
+    const { assetValues } = this.props;
 
     const assetsTotal = Math.round(
-      this.props.assets.reduce((total, asset) => total + asset.value.length, 0) / 1024
+      assetValues.reduce((total, { value }) => total + value.length, 0) / 1024
     );
 
-    const percentageUsed = Math.round((assetsTotal / assetMaxLimit) * 100);
+    const percentageUsed = Math.round((assetsTotal / ASSET_MAX_SIZE) * 100);
+
+    const emptyAssets = (
+      <div className="canvasAssetManager__emptyPanel">
+        <EuiEmptyPrompt
+          iconType="importAction"
+          title={<h2>Import your assets to get started</h2>}
+          titleSize="xs"
+        />
+      </div>
+    );
 
     const assetModal = isModalVisible ? (
       <EuiOverlayMask>
@@ -134,11 +177,44 @@ export class AssetManager extends React.PureComponent {
             <EuiModalHeaderTitle className="canvasAssetManager__modalHeaderTitle">
               Manage workpad assets
             </EuiModalHeaderTitle>
+            <EuiFlexGroup className="canvasAssetManager__fileUploadWrapper">
+              <EuiFlexItem grow={false}>
+                {loading ? (
+                  <Loading animated text="Uploading images" />
+                ) : (
+                  <EuiFilePicker
+                    initialPromptText="Select or drag and drop images"
+                    compressed
+                    multiple
+                    onChange={this.handleFileUpload}
+                    accept="image/*"
+                  />
+                )}
+              </EuiFlexItem>
+            </EuiFlexGroup>
+          </EuiModalHeader>
+          <EuiModalBody>
+            <EuiText size="s" color="subdued">
+              <p>
+                Below are the image assets in this workpad. Any assets that are currently in use
+                cannot be determined at this time. To reclaim space, delete assets.
+              </p>
+            </EuiText>
+            <EuiSpacer />
+            {assetValues.length ? (
+              <EuiFlexGrid responsive={false} columns={4}>
+                {assetValues.map(this.renderAsset)}
+              </EuiFlexGrid>
+            ) : (
+              emptyAssets
+            )}
+          </EuiModalBody>
+          <EuiModalFooter className="canvasAssetManager__modalFooter">
             <EuiFlexGroup className="canvasAssetManager__meterWrapper" responsive={false}>
               <EuiFlexItem>
                 <EuiProgress
                   value={assetsTotal}
-                  max={assetMaxLimit}
+                  max={ASSET_MAX_SIZE}
                   color={percentageUsed < 90 ? 'secondary' : 'danger'}
                   size="s"
                   aria-labelledby="CanvasAssetManagerLabel"
@@ -148,20 +224,6 @@ export class AssetManager extends React.PureComponent {
                 <EuiText id="CanvasAssetManagerLabel">{percentageUsed}% space used</EuiText>
               </EuiFlexItem>
             </EuiFlexGroup>
-          </EuiModalHeader>
-          <EuiModalBody>
-            <EuiText size="s" color="subdued">
-              <p>
-                Below are the image assets that you added to this workpad. To reclaim space, delete
-                assets that you no longer need. Unfortunately, any assets that are actually in use
-                cannot be determined at this time.
-              </p>
-            </EuiText>
-            <EuiFlexGrid responsive={false} columns={4}>
-              {this.props.assets.map(this.renderAsset)}
-            </EuiFlexGrid>
-          </EuiModalBody>
-          <EuiModalFooter>
             <EuiButton size="s" onClick={this.closeModal}>
               Close
             </EuiButton>
@@ -172,9 +234,7 @@ export class AssetManager extends React.PureComponent {
 
     return (
       <Fragment>
-        <EuiButtonEmpty size="s" onClick={this.showModal}>
-          Manage assets
-        </EuiButtonEmpty>
+        <EuiButtonEmpty onClick={this.showModal}>Manage assets</EuiButtonEmpty>
 
         {assetModal}
 

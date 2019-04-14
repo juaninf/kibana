@@ -17,12 +17,10 @@
  * under the License.
  */
 
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 import { buildQueryFromLucene } from '../from_lucene';
 import { decorateQuery } from '../decorate_query';
 import { luceneStringToDsl } from '../lucene_string_to_dsl';
-
-const configStub = { get: () => ({}) };
 
 describe('build query', function () {
 
@@ -47,11 +45,11 @@ describe('build query', function () {
 
       const expectedESQueries = queries.map(
         (query) => {
-          return decorateQuery(luceneStringToDsl(query.query), configStub);
+          return decorateQuery(luceneStringToDsl(query.query), {});
         }
       );
 
-      const result = buildQueryFromLucene(queries, configStub);
+      const result = buildQueryFromLucene(queries, {});
 
       expect(result.must).to.eql(expectedESQueries);
     });
@@ -61,11 +59,29 @@ describe('build query', function () {
         { query: { match_all: {} }, language: 'lucene' },
       ];
 
-      const result = buildQueryFromLucene(queries, configStub);
+      const result = buildQueryFromLucene(queries, {});
 
       expect(result.must).to.eql([queries[0].query]);
     });
 
+  });
+
+  it('should accept a date format in the decorated queries and combine that into the bool\'s must clause', function () {
+    const queries = [
+      { query: 'foo:bar', language: 'lucene' },
+      { query: 'bar:baz', language: 'lucene' },
+    ];
+    const dateFormatTZ = 'America/Phoenix';
+
+    const expectedESQueries = queries.map(
+      (query) => {
+        return decorateQuery(luceneStringToDsl(query.query), {}, dateFormatTZ);
+      }
+    );
+
+    const result = buildQueryFromLucene(queries, {}, dateFormatTZ);
+
+    expect(result.must).to.eql(expectedESQueries);
   });
 
 });

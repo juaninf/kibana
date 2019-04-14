@@ -7,7 +7,7 @@
 
 
 import ngMock from 'ng_mock';
-import expect from 'expect.js';
+import expect from '@kbn/expect';
 import sinon from 'sinon';
 
 // Import this way to be able to stub/mock functions later on in the tests using sinon.
@@ -33,7 +33,10 @@ describe('ML - Job Type Controller', () => {
       };
 
       const scope = $rootScope.$new();
-      $controller('MlNewJobStepJobType', { $scope: scope });
+
+      expect(() => {
+        $controller('MlNewJobStepJobType', { $scope: scope });
+      }).to.not.throwError();
 
       expect(scope.indexWarningTitle).to.eql('Index pattern test_pattern is not time based');
       stub.restore();

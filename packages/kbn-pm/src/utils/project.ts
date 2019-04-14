@@ -18,6 +18,7 @@
  */
 
 import chalk from 'chalk';
+import fs from 'fs';
 import { relative, resolve as resolvePath } from 'path';
 import { inspect } from 'util';
 
@@ -30,11 +31,21 @@ import {
   isLinkDependency,
   readPackageJson,
 } from './package_json';
-import { installInDir, runScriptInPackage, runScriptInPackageStreaming } from './scripts';
+import {
+  installInDir,
+  runScriptInPackage,
+  runScriptInPackageStreaming,
+  yarnWorkspacesInfo,
+} from './scripts';
 
-interface IBuildConfig {
+interface BuildConfig {
   skip?: boolean;
   intermediateBuildDirectory?: string;
+  oss?: boolean;
+}
+
+interface CleanConfig {
+  extraPatterns?: string[];
 }
 
 export class Project {
@@ -46,7 +57,6 @@ export class Project {
   public readonly json: IPackageJson;
   public readonly packageJsonLocation: string;
   public readonly nodeModulesLocation: string;
-  public readonly optimizeLocation: string;
   public readonly targetLocation: string;
   public readonly path: string;
   public readonly allDependencies: IPackageDependencies;
@@ -62,7 +72,6 @@ export class Project {
 
     this.packageJsonLocation = resolvePath(this.path, 'package.json');
     this.nodeModulesLocation = resolvePath(this.path, 'node_modules');
-    this.optimizeLocation = resolvePath(this.path, 'optimize');
     this.targetLocation = resolvePath(this.path, 'target');
 
     this.productionDependencies = this.json.dependencies || {};
@@ -117,7 +126,7 @@ export class Project {
     );
   }
 
-  public getBuildConfig(): IBuildConfig {
+  public getBuildConfig(): BuildConfig {
     return (this.json.kibana && this.json.kibana.build) || {};
   }
 
@@ -128,6 +137,10 @@ export class Project {
    */
   public getIntermediateBuildDirectory() {
     return resolvePath(this.path, this.getBuildConfig().intermediateBuildDirectory || '.');
+  }
+
+  public getCleanConfig(): CleanConfig {
+    return (this.json.kibana && this.json.kibana.clean) || {};
   }
 
   public hasScript(name: string) {
@@ -184,7 +197,41 @@ export class Project {
 
   public async installDependencies({ extraArgs }: { extraArgs: string[] }) {
     log.write(chalk.bold(`\n\nInstalling dependencies in [${chalk.green(this.name)}]:\n`));
-    return installInDir(this.path, extraArgs);
+    await installInDir(this.path, extraArgs);
+    await this.removeExtraneousNodeModules();
+  }
+
+  /**
+   * Yarn workspaces symlinks workspace projects to the root node_modules, even
+   * when there is no depenency on the project. This results in unnecicary, and
+   * often duplicated code in the build archives.
+   */
+  public async removeExtraneousNodeModules() {
+    // this is only relevant for the root workspace
+    if (!this.isWorkspaceRoot) {
+      return;
+    }
+
+    const workspacesInfo = await yarnWorkspacesInfo(this.path);
+    const unusedWorkspaces = new Set(Object.keys(workspacesInfo));
+
+    // check for any cross-project dependency
+    for (const name of Object.keys(workspacesInfo)) {
+      const workspace = workspacesInfo[name];
+      workspace.workspaceDependencies.forEach(w => unusedWorkspaces.delete(w));
+    }
+
+    unusedWorkspaces.forEach(name => {
+      const { dependencies, devDependencies } = this.json;
+      const nodeModulesPath = resolvePath(this.nodeModulesLocation, name);
+      const isDependency = dependencies && dependencies.hasOwnProperty(name);
+      const isDevDependency = devDependencies && devDependencies.hasOwnProperty(name);
+
+      if (!isDependency && !isDevDependency && fs.existsSync(nodeModulesPath)) {
+        log.write(`No dependency on ${name}, removing link in node_modules`);
+        fs.unlinkSync(nodeModulesPath);
+      }
+    });
   }
 }
 
