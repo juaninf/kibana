@@ -20,6 +20,7 @@
 import _ from 'lodash';
 import React from 'react';
 import angular from 'angular';
+import moment from 'moment';
 import chrome from 'ui/chrome';
 import dateMath from '@elastic/datemath';
 
@@ -32,7 +33,6 @@ import * as filterActions from '../doc_table/actions/filter';
 import 'ui/listen';
 import 'ui/visualize';
 import 'ui/fixed_scroll';
-import 'ui/filters/moment';
 import 'ui/index_patterns';
 import 'ui/state_management/app_state';
 import { timefilter } from 'ui/timefilter';
@@ -93,6 +93,21 @@ uiRoutes
           ? getSavedSearchBreadcrumbs
           : getRootBreadcrumbs
       ),
+    badge: (i18n, uiCapabilities) => {
+      if (uiCapabilities.discover.save) {
+        return undefined;
+      }
+
+      return {
+        text: i18n('kbn.discover.badge.readOnly.text', {
+          defaultMessage: 'Read only',
+        }),
+        tooltip: i18n('kbn.discover.badge.readOnly.tooltip', {
+          defaultMessage: 'Unable to save searches',
+        }),
+        iconType: 'glasses'
+      };
+    }
   })
   .when('/discover/:id?', {
     template: indexTemplate,
@@ -790,6 +805,10 @@ function discoverController(
       to: dateMath.parse(timefilter.getTime().to, { roundUp: true })
     };
     $scope.time = timefilter.getTime();
+  };
+
+  $scope.toMoment = function (datetime) {
+    return moment(datetime).format(config.get('dateFormat'));
   };
 
   $scope.updateRefreshInterval = function () {

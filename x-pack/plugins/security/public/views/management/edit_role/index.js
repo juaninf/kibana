@@ -6,7 +6,7 @@
 
 import _ from 'lodash';
 import routes from 'ui/routes';
-import { uiCapabilities } from 'ui/capabilities';
+import { capabilities } from 'ui/capabilities';
 import { kfetch } from 'ui/kfetch';
 import { fatalError } from 'ui/notify';
 import template from 'plugins/security/views/management/edit_role/edit_role.html';
@@ -14,7 +14,6 @@ import 'ui/angular_ui_select';
 import 'plugins/security/services/application_privilege';
 import 'plugins/security/services/shield_user';
 import 'plugins/security/services/shield_role';
-import 'plugins/security/services/shield_privileges';
 import 'plugins/security/services/shield_indices';
 
 import { IndexPatternsProvider } from 'ui/index_patterns/index_patterns';
@@ -113,7 +112,8 @@ routes.when(`${EDIT_ROLES_PATH}/:name?`, {
 
       if (allowFieldLevelSecurity) {
         emptyOption.field_security = {
-          grant: ['*']
+          grant: ['*'],
+          except: [],
         };
       }
 
@@ -146,7 +146,7 @@ routes.when(`${EDIT_ROLES_PATH}/:name?`, {
             allowFieldLevelSecurity={allowFieldLevelSecurity}
             spaces={spaces}
             spacesEnabled={enableSpaceAwarePrivileges}
-            uiCapabilities={uiCapabilities}
+            uiCapabilities={capabilities.get()}
             features={features}
             privileges={privileges}
           />
